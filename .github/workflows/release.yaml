@@ -1,0 +1,62 @@
+name: Build release
+
+# A release is made whenever module.json changes on main (bump "version" to release),
+# when a v* tag is pushed, or when a release is published by hand.
+on:
+  push:
+    branches: [main]
+    paths: ["module.json", ".github/workflows/release.yaml"]
+    tags: ["v*"]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Work out version
+        id: v
+        run: |
+          if [ -n "${{ github.event.release.tag_name }}" ]; then TAG="${{ github.event.release.tag_name }}"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then TAG="${{ github.ref_name }}"
+          else TAG="v$(jq -r .version module.json)"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Set version and URLs in module.json
+        run: |
+          REPO="${{ github.repository }}"
+          TAG="${{ steps.v.outputs.tag }}"
+          jq --arg v "${{ steps.v.outputs.version }}" \
+             --arg url "https://github.com/$REPO" \
+             --arg manifest "https://github.com/$REPO/releases/latest/download/module.json" \
+             --arg download "https://github.com/$REPO/releases/download/$TAG/module.zip" \
+             '.version=$v | .url=$url | .manifest=$manifest | .download=$download' \
+             module.json > module.tmp && mv module.tmp module.json
+
+      - name: Zip module
+        run: zip -r module.zip module.json scripts/ README.md LICENSE
+
+      - name: Point the version tag at this commit
+        if: github.ref_type != 'tag' && github.event_name != 'release'
+        run: |
+          git tag -f "${{ steps.v.outputs.tag }}" "${{ github.sha }}"
+          git push -f origin "refs/tags/${{ steps.v.outputs.tag }}"
+
+      - name: Create or update release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.v.outputs.tag }}
+          name: ${{ steps.v.outputs.tag }}
+          commit: ${{ github.sha }}
+          allowUpdates: true
+          omitBodyDuringUpdate: true
+          body: "Install in Foundry with the manifest URL: https://github.com/${{ github.repository }}/releases/latest/download/module.json"
+          artifacts: "module.json, module.zip"
+          token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,12 @@
+{
+  "id": "map-autowalls",
+  "title": "Map Auto-Walls",
+  "description": "Scans a scene's map image for walls and obstacles and places Foundry walls along them, with a live preview on the map before anything is created.",
+  "version": "1.0.0",
+  "authors": [{ "name": "PsyK2812", "url": "https://github.com/PsyK2812" }],
+  "compatibility": { "minimum": "13", "verified": "14" },
+  "esmodules": ["scripts/main.js"],
+  "url": "https://github.com/PsyK2812/foundry-map-autowalls",
+  "manifest": "https://github.com/PsyK2812/foundry-map-autowalls/releases/latest/download/module.json",
+  "download": "https://github.com/PsyK2812/foundry-map-autowalls/releases/download/v1.0.0/module.zip"
+}
