@@ -385,7 +385,7 @@ function dialogHTML(o, { hasAuto, squareGrid }) {
         <button type="button" data-mapaw="trunks"><i class="fa-solid fa-tree"></i> Place tree trunks by clicking</button>
         <button type="button" data-mapaw="trunks-clear" title="Remove all placed trunks"><i class="fa-solid fa-eraser"></i></button>
       </div>
-      <p class="hint">Click a tree to put a small round wall on its trunk (blocks sight through the trunk, not the leaves). Click a trunk again to remove it; Esc or the button to stop.</p>
+      <p class="hint">Click a tree to put a small round wall on its trunk (blocks sight through the trunk, not the leaves). Click a trunk again to remove it; Esc or the button to stop. Trunk size applies to the trunks you place next.</p>
       <div class="form-group">
         <label>Trunk size</label>
         <input type="range" name="trunkSize" min="0.25" max="1.5" step="0.05" value="${o.trunkSize}">
@@ -415,6 +415,7 @@ function dialogHTML(o, { hasAuto, squareGrid }) {
     </fieldset>
   </div>
   <style>
+    .mapaw { max-height: calc(100vh - 220px); overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
     .mapaw fieldset { margin: 0 0 6px; padding: 4px 8px; }
     .mapaw .form-group { display: flex; align-items: center; gap: 6px; }
     .mapaw .form-group label { flex: 0 0 46%; }
@@ -653,7 +654,7 @@ async function autoWall(scene) {
 
     /** Combine detected, placed and traced walls; redraw without re-detecting. */
     const compose = () => {
-      const placed = (o.manualTrunks ?? []).flatMap(([X, Y]) => trunkWalls(X, Y, (o.trunkSize / 2) * canvas.dimensions.size));
+      const placed = (o.manualTrunks ?? []).flatMap(([X, Y, sz]) => trunkWalls(X, Y, ((sz ?? o.trunkSize) / 2) * canvas.dimensions.size));
       const traced = tracedSegs();
       preview.setErase(o.erase ?? []);
       const imported = importedWalls();
@@ -789,9 +790,9 @@ async function autoWall(scene) {
           : canvas.stage.worldTransform.applyInverse(new PIXI.Point(ev.clientX - rect.left, ev.clientY - rect.top));
         o.manualTrunks ??= [];
         const hit = Math.max(canvas.dimensions.size * 0.4, (o.trunkSize / 2) * canvas.dimensions.size * 1.3);
-        const i = o.manualTrunks.findIndex(([X, Y]) => Math.hypot(X - pt.x, Y - pt.y) <= hit);
+        const i = o.manualTrunks.findIndex(([X, Y, sz]) => Math.hypot(X - pt.x, Y - pt.y) <= Math.max(hit, ((sz ?? o.trunkSize) / 2) * canvas.dimensions.size * 1.3));
         if (i >= 0) o.manualTrunks.splice(i, 1);
-        else o.manualTrunks.push([Math.round(pt.x), Math.round(pt.y)]);
+        else o.manualTrunks.push([Math.round(pt.x), Math.round(pt.y), o.trunkSize]);   // each trunk keeps the size it was placed with
         run();
       };
       const onKey = (ev) => { if (ev.key === "Escape") { cleanup(); schedule(); } };
@@ -1082,6 +1083,8 @@ async function autoWall(scene) {
       });
       root.querySelector("[data-mapaw=pick]")?.addEventListener("click", (ev) => startPick(ev.currentTarget));
       root.querySelector("[data-mapaw=trunks]")?.addEventListener("click", (ev) => startTrunks(ev.currentTarget));
+      // keep mouse-wheel scrolling inside the panel (Foundry's canvas listens for the wheel too)
+      root.querySelector(".mapaw")?.addEventListener("wheel", (ev) => ev.stopPropagation(), { passive: true });
       root.querySelector("[data-mapaw=trunks-clear]")?.addEventListener("click", () => { o.manualTrunks = []; schedule(); });
       root.querySelector("[data-mapaw=erase]")?.addEventListener("click", (ev) => startErase(ev.currentTarget));
       root.querySelector("[data-mapaw=erase-undo]")?.addEventListener("click", () => { o.erase?.pop(); schedule(); });
