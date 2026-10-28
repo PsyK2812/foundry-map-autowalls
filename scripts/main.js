@@ -560,7 +560,7 @@ async function autoWall(scene) {
           const L = Math.hypot(b.x - a.x, b.y - a.y), nx = -(b.y - a.y) / L, ny = (b.x - a.x) / L;
           a = { x: a.x + nx * off, y: a.y + ny * off }; b = { x: b.x + nx * off, y: b.y + ny * off };
         }
-        return { c: [...geo.toScene(a.x, a.y), ...geo.toScene(b.x, b.y)], door: w.door ?? null, type: w.type ?? null };
+        return { c: [...geo.toScene(a.x, a.y), ...geo.toScene(b.x, b.y)], door: w.door ?? null, type: w.type ?? null, height: w.height ?? null };
       });
       // doors and windows move with the snapped wall they sit in (same line, touching ends)
       const raw = f.walls.map((w) => (w.c ?? w).map(Number));
@@ -1033,6 +1033,10 @@ async function createWalls(scene, bg, walls, o) {
   const data = walls.map((w) => {
     if (Array.isArray(w)) return { ...base, c: w };
     const d = { ...base, ...(w.type ? wallPreset(w.type) : {}), c: w.c };
+    // wall height (bottom/top, in scene units), read by the Wall Height module
+    if (w.height && (w.height.top != null || w.height.bottom != null)) {
+      d.flags = { ...d.flags, "wall-height": { top: w.height.top ?? null, bottom: w.height.bottom ?? null } };
+    }
     if (w.door === "door" || w.door === true) d.door = DOOR.DOOR;
     else if (w.door === "secret") d.door = DOOR.SECRET;
     return d;

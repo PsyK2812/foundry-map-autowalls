@@ -62,7 +62,7 @@ File format (coordinates are pixels of the original map image):
   ]
 }
 ```
-`door` is `"door"` or `"secret"`; `type` is `normal`, `terrain`, `invisible`, `ethereal` or `window` (blocks movement, lets sight and light through). `"snap": false` keeps a wall exactly where the file puts it (used for outer walls placed on the outside face). If the scene's map has a different size, the walls are scaled to fit.
+`door` is `"door"` or `"secret"`; `type` is `normal`, `terrain`, `invisible`, `ethereal` or `window` (blocks movement, lets sight and light through). `"height": {"bottom": 0, "top": 3}` sets the wall's height for the Wall Height module (scene units, e.g. ft; ignored without that module). `"snap": false` keeps a wall exactly where the file puts it (used for outer walls placed on the outside face). If the scene's map has a different size, the walls are scaled to fit.
 
 ## Tips
 - Align the grid first (e.g. with Grid Auto-Align) if you want to snap to it.
