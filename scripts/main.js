@@ -395,7 +395,6 @@ function dialogHTML(o, { hasAuto, squareGrid }) {
     </fieldset>
   </div>
   <style>
-    .mapaw { max-height: calc(100vh - 220px); overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
     .mapaw fieldset { margin: 0 0 6px; padding: 4px 8px; }
     .mapaw .form-group { display: flex; align-items: center; gap: 6px; }
     .mapaw .form-group label { flex: 0 0 46%; }
@@ -916,8 +915,28 @@ async function autoWall(scene) {
       });
       root.querySelector("[data-mapaw=pick]")?.addEventListener("click", (ev) => startPick(ev.currentTarget));
       root.querySelector("[data-mapaw=trunks]")?.addEventListener("click", (ev) => startTrunks(ev.currentTarget));
-      // keep mouse-wheel scrolling inside the panel (Foundry's canvas listens for the wheel too)
-      root.querySelector(".mapaw")?.addEventListener("wheel", (ev) => ev.stopPropagation(), { passive: true });
+      // Fit the window on screen and let the settings scroll, with the buttons always visible.
+      // (Styles set inline: Foundry's window CSS otherwise lets the dialog grow past the screen.)
+      const panel = root.querySelector(".mapaw");
+      if (panel) {
+        const win = root.closest?.(".application, .window-app") ?? root;
+        const fit = () => {
+          const top = win.getBoundingClientRect?.().top ?? 70;
+          win.style.maxHeight = `${Math.max(300, window.innerHeight - Math.max(0, top) - 20)}px`;
+        };
+        fit();
+        window.addEventListener("resize", fit);
+        win.style.display = "flex";
+        win.style.flexDirection = "column";
+        for (let el = panel.parentElement; el && el !== win; el = el.parentElement) {
+          Object.assign(el.style, { display: "flex", flexDirection: "column", minHeight: "0", flex: "1 1 auto", overflow: "hidden" });
+        }
+        Object.assign(panel.style, { flex: "1 1 auto", minHeight: "0", overflowY: "auto", overscrollBehavior: "contain", paddingRight: "4px" });
+        // footer buttons keep their size
+        root.querySelectorAll("footer, .form-footer, .dialog-buttons").forEach((f) => { f.style.flex = "0 0 auto"; });
+        // keep mouse-wheel scrolling inside the panel (Foundry's canvas listens for the wheel too)
+        panel.addEventListener("wheel", (ev) => ev.stopPropagation(), { passive: true });
+      }
       root.querySelector("[data-mapaw=trunks-clear]")?.addEventListener("click", () => { o.manualTrunks = []; schedule(); });
       root.querySelector("[data-mapaw=erase]")?.addEventListener("click", (ev) => startErase(ev.currentTarget));
       root.querySelector("[data-mapaw=erase-undo]")?.addEventListener("click", () => { o.erase?.pop(); schedule(); });
