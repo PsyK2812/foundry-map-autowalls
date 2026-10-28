@@ -1,4 +1,4 @@
-import { prepare, suggestThreshold, suggestEdge, detectWalls, sampleColor, wallCost, trunkWalls, regularize, traceField, snapTrace, intersectLines, blackShare, mergeOutline, findInnerWalls } from "./detect.js";
+import { prepare, suggestThreshold, suggestEdge, detectWalls, sampleColor, wallCost, trunkWalls, regularize, traceField, snapTrace, blackShare, mergeOutline, findInnerWalls } from "./detect.js";
 
 /** Starting threshold for a mode (brightness, or edge strength for straight walls). */
 const suggestFor = (work, mode) => (mode === "straight" ? suggestEdge(work) : suggestThreshold(work, mode === "color" ? "dark" : mode));
@@ -163,17 +163,6 @@ class Preview {
     this.container.addChild(this.lines);
     this.boxes = new PIXI.Graphics();
     this.container.addChild(this.boxes);
-  }
-
-  /** Tracing: the rubber-band line from the last point to the cursor. */
-  setLive(seg) {
-    if (!this.live) { this.live = new PIXI.Graphics(); this.container.addChild(this.live); }
-    const g = this.live;
-    g.clear();
-    if (!seg) return;
-    const w = Math.max(2, canvas.dimensions.size * 0.03);
-    if (typeof g.lineStyle === "function") { g.lineStyle(w, 0x40e0ff, 0.9); g.moveTo(seg[0], seg[1]).lineTo(seg[2], seg[3]); }
-    else { g.moveTo(seg[0], seg[1]).lineTo(seg[2], seg[3]); g.stroke({ width: w, color: 0x40e0ff, alpha: 0.9 }); }
   }
 
   /** Erased areas (red boxes) and the box being dragged. */
@@ -362,15 +351,6 @@ function dialogHTML(o, { hasAuto, squareGrid }) {
       </div>
     </fieldset>
     <fieldset>
-      <legend>Trace by hand</legend>
-      <div class="form-group">
-        <button type="button" data-mapaw="trace"><i class="fa-solid fa-pen-ruler"></i> Trace walls by clicking</button>
-        <button type="button" data-mapaw="trace-undo" title="Undo last point"><i class="fa-solid fa-rotate-left"></i></button>
-        <button type="button" data-mapaw="trace-clear" title="Remove all traced walls"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <p class="hint">Click roughly along a wall, corner to corner; each piece snaps onto the drawn wall and corners join up. Right-click ends a wall (or click its start to close it). Hold Shift to place a point exactly where you click. Esc or the button to stop.</p>
-    </fieldset>
-    <fieldset>
       <legend>Erase</legend>
       <div class="form-group">
         <button type="button" data-mapaw="erase"><i class="fa-solid fa-eraser"></i> Erase walls by dragging a box</button>
@@ -425,7 +405,7 @@ function dialogHTML(o, { hasAuto, squareGrid }) {
     .mapaw .mapaw-status { margin: 0 0 6px; font-weight: bold; }
     .mapaw .mapaw-swatch { width: 28px; height: 20px; border: 1px solid #888; border-radius: 3px; }
     .mapaw button[data-mapaw] { flex: 1; }
-    .mapaw button[data-mapaw=trunks-clear], .mapaw button[data-mapaw=erase-undo], .mapaw button[data-mapaw=erase-clear], .mapaw button[data-mapaw=trace-undo], .mapaw button[data-mapaw=trace-clear], .mapaw button[data-mapaw=import-clear] { flex: 0 0 36px; }
+    .mapaw button[data-mapaw=trunks-clear], .mapaw button[data-mapaw=erase-undo], .mapaw button[data-mapaw=erase-clear], .mapaw button[data-mapaw=import-clear] { flex: 0 0 36px; }
     .mapaw button.active { box-shadow: 0 0 6px #ff6400 inset; }
   </style>`;
 }
@@ -561,7 +541,6 @@ async function autoWall(scene) {
 
     let detected = [];
     let black = 0, blackFor = null;
-    const tracedSegs = () => (o.traced ?? []).flatMap((ch) => ch.slice(1).map((p, i) => [...ch[i], ...p]));
     /** Walls from an imported file, in scene coordinates (snapped if asked). */
     let importCache = null;
     const importedWalls = () => {
@@ -652,13 +631,12 @@ async function autoWall(scene) {
       input.click();
     };
 
-    /** Combine detected, placed and traced walls; redraw without re-detecting. */
+    /** Combine detected, placed and imported walls; redraw without re-detecting. */
     const compose = () => {
       const placed = (o.manualTrunks ?? []).flatMap(([X, Y, sz]) => trunkWalls(X, Y, ((sz ?? o.trunkSize) / 2) * canvas.dimensions.size));
-      const traced = tracedSegs();
       preview.setErase(o.erase ?? []);
       const imported = importedWalls();
-      const walls = [...detected, ...placed, ...traced, ...imported.map((w) => w.c)]
+      const walls = [...detected, ...placed, ...imported.map((w) => w.c)]
         .map((c) => c.map(Math.round))
         .filter((c) => c[0] !== c[2] || c[1] !== c[3]);
       // door / wall-type info for imported walls, keyed by rounded coordinates
@@ -667,7 +645,6 @@ async function autoWall(scene) {
       preview.setWalls(walls);
       const existing = scene.walls.size - (o.replace ? autoWalls().length : 0);
       setStatus(`<i class="fa-solid fa-dungeon"></i> ${walls.length} wall segments`
-        + (traced.length ? `, ${traced.length} traced` : "")
         + (imported.length ? `, ${imported.length} imported${imported.some((w) => w.door) ? ` (${imported.filter((w) => w.door).length} doors)` : ""}` : "")
         + (o.manualTrunks?.length ? `, ${o.manualTrunks.length} placed trunk${o.manualTrunks.length === 1 ? "" : "s"}` : "")
         + (existing ? ` <span style="font-weight:normal;opacity:.75">(scene already has ${existing} other walls)</span>` : "")
@@ -808,152 +785,8 @@ async function autoWall(scene) {
       pickCleanup = cleanup;
     };
 
-    /** Trace: click along walls; each piece snaps onto the drawn wall, corners join. */
+    // edge field for snapping imported walls
     let field = null, fieldFor = null;
-    let chain = null;   // current chain: index into o.traced, plus line info per segment
-    const startTrace = (button) => {
-      if (pickCleanup) { const was = button.classList.contains("active"); pickCleanup(); if (was) return compose(); }
-      const view = canvas.app.view;
-      const prevCursor = view.style.cursor;
-      view.style.cursor = "crosshair";
-      button.classList.add("active");
-      setStatus(`<i class="fa-solid fa-pen-ruler"></i> Click along a wall, corner to corner. Right-click ends the wall, Esc stops.`);
-      const S = canvas.dimensions.size;
-      const toCanvas = (ev) => {
-        const rect = view.getBoundingClientRect();
-        return canvas.canvasCoordinatesFromClient
-          ? canvas.canvasCoordinatesFromClient({ x: ev.clientX, y: ev.clientY })
-          : canvas.stage.worldTransform.applyInverse(new PIXI.Point(ev.clientX - rect.left, ev.clientY - rect.top));
-      };
-      // Existing points to snap to: traced points and ends of detected walls
-      const snapPoint = (p) => {
-        let best = null, bd = 0.3 * S;
-        const test = (x, y) => { const d = Math.hypot(x - p.x, y - p.y); if (d < bd) { bd = d; best = { x, y }; } };
-        for (const ch of o.traced ?? []) for (const [x, y] of ch) test(x, y);
-        for (const c of detected) { test(c[0], c[1]); test(c[2], c[3]); }
-        return best;
-      };
-      const finish = () => { chain = null; preview.setLive(null); };
-      const onDown = (ev) => {
-        if (ev.button === 2) { ev.preventDefault(); ev.stopImmediatePropagation(); finish(); return compose(); }
-        if (ev.button !== 0) return;
-        ev.preventDefault();
-        ev.stopImmediatePropagation();
-        if (fieldFor !== work) { field = traceField(work); fieldFor = work; }
-        let p = toCanvas(ev);
-        p = { x: p.x, y: p.y };
-        o.traced ??= [];
-        const exact = ev.shiftKey;
-        const hit = exact ? null : snapPoint(p);
-        if (!chain) {
-          const q = hit ?? p;
-          o.traced.push([[q.x, q.y]]);
-          chain = { pts: o.traced[o.traced.length - 1], fixed: [!!hit || exact], lines: [] };
-          return compose();
-        }
-        const pts = chain.pts;
-        const a = { x: pts[pts.length - 1][0], y: pts[pts.length - 1][1] };
-        // Clicking the chain's (unsnapped) start closes the loop; that corner is worked out below
-        const closing = hit && pts.length >= 3 && Math.hypot(hit.x - pts[0][0], hit.y - pts[0][1]) < 1 && !chain.fixed[0];
-        let b = hit ?? p;
-        const bFixed = (!!hit && !closing) || exact;
-        // Nearly horizontal/vertical → exactly
-        if (!bFixed) {
-          const dx = b.x - a.x, dy = b.y - a.y;
-          const tan = Math.tan((8 * Math.PI) / 180);
-          if (Math.abs(dy) <= tan * Math.abs(dx)) b = { x: b.x, y: a.y };
-          else if (Math.abs(dx) <= tan * Math.abs(dy)) b = { x: a.x, y: b.y };
-        }
-        // Snap onto the drawn wall (work coordinates)
-        let off = 0;
-        if (!exact) {
-          const [ax, ay] = geo.toWork(a.x, a.y), [bx, by] = geo.toWork(b.x, b.y);
-          off = snapTrace(field, { x: ax, y: ay }, { x: bx, y: by }, geo.ppg) * geo.sx;
-        }
-        const L = Math.hypot(b.x - a.x, b.y - a.y);
-        if (L < 2) return;
-        const u = { x: (b.x - a.x) / L, y: (b.y - a.y) / L }, n = { x: -u.y, y: u.x };
-        const aFixed = chain.fixed[chain.fixed.length - 1];
-        let a2 = aFixed ? a : { x: a.x + n.x * off, y: a.y + n.y * off };
-        let b2 = bFixed ? b : { x: b.x + n.x * off, y: b.y + n.y * off };
-        // Corner: meet the previous piece where the two lines cross
-        const prev = chain.lines[chain.lines.length - 1];
-        if (prev && !aFixed) {
-          const X = intersectLines(prev.p, prev.u, a2, u);
-          if (X && Math.hypot(X.x - a.x, X.y - a.y) <= 0.6 * S) a2 = X;
-          else a2 = a;
-        }
-        // Loose ends: run on (or trim back) to a wall they almost touch
-        const others = () => {
-          const mine = chain.pts.slice(1).map((q, i) => [...chain.pts[i], ...q]);
-          const key = (c) => c.map(Math.round).join(",");
-          const skip = new Set(mine.map(key));
-          return [...detected, ...tracedSegs()].filter((c) => !skip.has(key(c)));
-        };
-        const snapEnd = (pt, dir) => {
-          let best = null, bt = 0.45 * S;
-          for (const c of others()) {
-            const v = { x: c[2] - c[0], y: c[3] - c[1] };
-            const len = Math.hypot(v.x, v.y);
-            if (len < 1) continue;
-            const vu = { x: v.x / len, y: v.y / len };
-            const X = intersectLines(pt, dir, { x: c[0], y: c[1] }, vu);
-            if (!X) continue;
-            const t = (X.x - pt.x) * dir.x + (X.y - pt.y) * dir.y;          // along the new wall
-            const w = (X.x - c[0]) * vu.x + (X.y - c[1]) * vu.y;            // along the other wall
-            if (Math.abs(t) <= bt && w >= -0.15 * S && w <= len + 0.15 * S) { bt = Math.abs(t); best = X; }
-          }
-          return best ?? pt;
-        };
-        if (closing) {
-          const first = chain.lines[0];
-          const X = first && intersectLines(first.p, first.u, a2, u);
-          if (X && Math.hypot(X.x - pts[0][0], X.y - pts[0][1]) <= 0.6 * S) { b2 = X; pts[0] = [X.x, X.y]; }
-          else b2 = { x: pts[0][0], y: pts[0][1] };
-        } else if (!bFixed) b2 = snapEnd(b2, u);
-        if (!chain.lines.length && !chain.fixed[0]) a2 = snapEnd(a2, { x: -u.x, y: -u.y });
-        pts[pts.length - 1] = [a2.x, a2.y];
-        pts.push([b2.x, b2.y]);
-        chain.fixed.push(bFixed);
-        chain.lines.push({ p: a2, u });
-        if (closing) { finish(); return compose(); }
-        // Clicking the chain's start closes it
-        if (hit && Math.hypot(hit.x - pts[0][0], hit.y - pts[0][1]) < 1) finish();
-        compose();
-      };
-      const onMove = (ev) => {
-        if (!chain) return;
-        const p = toCanvas(ev);
-        const last = chain.pts[chain.pts.length - 1];
-        preview.setLive([last[0], last[1], p.x, p.y]);
-      };
-      const onMenu = (ev) => { ev.preventDefault(); ev.stopImmediatePropagation(); };
-      const onKey = (ev) => { if (ev.key === "Escape") { cleanup(); compose(); } };
-      const cleanup = () => {
-        finish();
-        view.removeEventListener("pointerdown", onDown, true);
-        view.removeEventListener("contextmenu", onMenu, true);
-        window.removeEventListener("pointermove", onMove, true);
-        window.removeEventListener("keydown", onKey, true);
-        view.style.cursor = prevCursor;
-        button.classList.remove("active");
-        pickCleanup = null;
-      };
-      view.addEventListener("pointerdown", onDown, true);
-      view.addEventListener("contextmenu", onMenu, true);
-      window.addEventListener("pointermove", onMove, true);
-      window.addEventListener("keydown", onKey, true);
-      pickCleanup = cleanup;
-    };
-    const traceUndo = () => {
-      const t = o.traced ?? [];
-      const ch = t[t.length - 1];
-      if (!ch) return;
-      ch.pop();
-      if (chain && chain.pts === ch) { chain.fixed.pop(); chain.lines.pop(); }
-      if (ch.length <= 1) { t.pop(); if (chain?.pts === ch) chain = null; preview.setLive(null); }
-      compose();
-    };
 
     /** Eraser: drag boxes on the map; detected walls inside them are cut away. */
     const startErase = (button) => {
@@ -1089,11 +922,8 @@ async function autoWall(scene) {
       root.querySelector("[data-mapaw=erase]")?.addEventListener("click", (ev) => startErase(ev.currentTarget));
       root.querySelector("[data-mapaw=erase-undo]")?.addEventListener("click", () => { o.erase?.pop(); schedule(); });
       root.querySelector("[data-mapaw=erase-clear]")?.addEventListener("click", () => { o.erase = []; schedule(); });
-      root.querySelector("[data-mapaw=trace]")?.addEventListener("click", (ev) => startTrace(ev.currentTarget));
       root.querySelector("[data-mapaw=import]")?.addEventListener("click", importFile);
       root.querySelector("[data-mapaw=import-clear]")?.addEventListener("click", () => { o.importFile = null; importCache = null; const l = root.querySelector(".mapaw-import-name"); if (l) l.textContent = ""; compose(); });
-      root.querySelector("[data-mapaw=trace-undo]")?.addEventListener("click", traceUndo);
-      root.querySelector("[data-mapaw=trace-clear]")?.addEventListener("click", () => { o.traced = []; chain = null; preview.setLive(null); compose(); });
       syncVisibility();
       schedule();
     };
@@ -1123,7 +953,6 @@ async function autoWall(scene) {
     delete save.mode;      // each new map starts on Auto-detect
     delete save.manualTrunks;
     delete save.erase;
-    delete save.traced;
     delete save.importFile;
     delete save.importName;
     await game.settings.set(MODULE_ID, "lastOptions", save);

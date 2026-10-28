@@ -33,7 +33,6 @@ Adjust until it looks right, then click **Create Walls**.
 | Wall position | 0 (default) = walls go down the **middle** of the drawn wall: thin walls by their centre line, walls that merge into rock or a dark surround half the measured wall thickness in from the floor, outer walls on black-background maps halfway between their floor and void sides. Where the middle can't be found (only the void's edge is visible), walls sit on the outside face, never the inside. Raise the slider to push walls further out. |
 | Place tree trunks by clicking | Click trees on the map to put a small round wall (8 segments) on the trunk, so it blocks sight but the leaves don't. Click a trunk again to remove it, Esc to stop; the eraser removes all. *Trunk size* sets the width. Works with any mode. |
 | Straighten to main lines (buildings) | On by default for *Straight building walls*. Snaps walls onto the building's long straight lines, runs them straight behind crates and furniture (no more detours), closes small breaks, keeps door gaps open, trims bits poking out past a wall and drops pieces that aren't connected to the building. Only for straight-walled buildings. Also works in the brightness and colour modes: tick it there and only long straight wall runs are kept, so rubble and debris against walls stop making wiggly walls. |
-| Trace walls by clicking | For maps the detection can't handle. Click roughly along a wall, corner to corner: each piece snaps onto the middle of the drawn wall (or its edge), near-straight pieces become exactly straight, corners join where the lines cross, and loose ends run on to a wall they almost touch. Right-click ends a wall; clicking its start closes it. Shift-click places a point exactly. Undo removes the last point, ✕ removes all traced walls. Works in any mode, including *No walls*. |
 | Erase walls by dragging a box | Drag boxes over junk (carts, furniture, watermarks); the detected walls inside are cut away. Boxes stay while you change other settings. Undo removes the last box, ✕ removes all. |
 | Straighten almost-straight walls | Makes nearly horizontal/vertical walls exactly straight. |
 | Snap corners to grid | For maps whose walls follow the grid: snaps corners to full or half squares. |
@@ -47,7 +46,7 @@ Settings are remembered per scene and as your default for the next map.
 Macro: `game.modules.get("map-autowalls").api.autoWall(scene)`
 
 ## Walls from a file
-**Import walls file…** loads a `.json` file listing the walls for a map — for example one Claude made by looking at the map. With *Snap imported walls onto the drawn walls* ticked, each wall is nudged onto the drawn wall nearby. Imported walls show in the preview like any others, so you can erase, trace or add detected walls before creating them.
+**Import walls file…** loads a `.json` file listing the walls for a map — for example one Claude made by looking at the map. With *Snap imported walls onto the drawn walls* ticked, each wall is nudged onto the drawn wall nearby. Imported walls show in the preview like any others, so you can erase or add detected walls before creating them.
 
 File format (coordinates are pixels of the original map image):
 
