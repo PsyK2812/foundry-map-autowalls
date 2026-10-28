@@ -399,7 +399,9 @@ function dialogHTML(o, { hasAuto, squareGrid }) {
     .mapaw .form-group { display: flex; align-items: center; gap: 6px; }
     .mapaw .form-group label { flex: 0 0 46%; }
     .mapaw .form-group input[type=range] { flex: 1; }
-    .mapaw .form-group output { flex: 0 0 52px; text-align: right; font-variant-numeric: tabular-nums; }
+    .mapaw .form-group output { display: none; }
+    .mapaw .form-group input.mapaw-num { flex: 0 0 62px; width: 62px; text-align: right; }
+    .mapaw .form-group .mapaw-unit { flex: 0 0 34px; opacity: .8; }
     .mapaw .hint { margin: 0 0 4px; font-size: 0.85em; opacity: 0.75; }
     .mapaw .mapaw-status { margin: 0 0 6px; font-weight: bold; }
     .mapaw .mapaw-swatch { width: 28px; height: 20px; border: 1px solid #888; border-radius: 3px; }
@@ -699,6 +701,7 @@ async function autoWall(scene) {
 
     let timer = null;
     const schedule = () => {
+      syncNumbers();
       clearTimeout(timer);
       setStatus(`<i class="fa-solid fa-spinner fa-spin"></i> Updating preview…`);
       timer = setTimeout(run, 250);
@@ -896,10 +899,43 @@ async function autoWall(scene) {
         syncVisibility();
     };
 
+    /** Every slider also gets a number box; keep them in step. */
+    const UNITS = { minThick: "% sq", bridge: "% sq", solidWidth: "sq", minLength: "sq", minSize: "sq", push: "sq", trunkSize: "sq" };
+    const syncNumbers = () => {
+      root?.querySelectorAll("input[type=range]").forEach((r) => {
+        const n = r.parentElement?.querySelector("input.mapaw-num");
+        if (n && document.activeElement !== n) n.value = r.value;
+      });
+    };
+    const addNumberBoxes = () => {
+      root.querySelectorAll(".mapaw input[type=range]").forEach((r) => {
+        if (r.parentElement.querySelector("input.mapaw-num")) return;
+        const n = document.createElement("input");
+        n.type = "number"; n.className = "mapaw-num";
+        n.min = r.min; n.max = r.max; n.step = r.step; n.value = r.value;
+        n.title = r.name === "push" ? "0 = middle of the drawn wall" : "";
+        const u = document.createElement("span");
+        u.className = "mapaw-unit"; u.textContent = UNITS[r.name] ?? "";
+        r.after(n, u);
+        const apply = () => {
+          let v = Number(n.value);
+          if (!Number.isFinite(v)) return;
+          v = Math.min(Number(r.max), Math.max(Number(r.min), v));
+          r.value = v;
+          r.dispatchEvent(new Event("input", { bubbles: true }));
+        };
+        n.addEventListener("change", () => { apply(); n.value = r.value; });
+        n.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); apply(); n.value = r.value; } });
+        // the number box isn't a setting itself
+        n.addEventListener("input", (ev) => ev.stopPropagation());
+      });
+    };
+
     const onRender = (_event, dlg) => {
       root = dlg?.element instanceof HTMLElement ? dlg.element : (dlg instanceof HTMLElement ? dlg : dlg?.[0]);
       if (!root) return;
       const form = root.querySelector("form") ?? root;
+      addNumberBoxes();
       form.addEventListener("input", (ev) => {
         const t = ev.target;
         const out = t.parentElement?.querySelector("output");
